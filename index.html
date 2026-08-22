@@ -1,11 +1,91 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+  <meta charset="UTF-8">
+  <title>PII Redactor</title>
+  <style>
+    body { font-family: Arial; max-width: 800px; margin: 40px auto; padding: 20px; }
+    textarea { width: 100%; height: 150px; padding: 10px; font-size: 14px; }
+    button { padding: 10px 20px; margin-top: 10px; margin-right: 10px; cursor: pointer; }
+    .box { border: 1px solid #ccc; padding: 15px; margin-top: 15px; border-radius: 8px; }
+    .redacted { background: #ffeaea; }
+    .summary { background: #eafbea; }
+    mark { background: #ffe066; padding: 2px 4px; border-radius: 3px; }
+    .risk-none { color: green; }
+    .risk-low { color: #b8860b; }
+    .risk-medium { color: orange; }
+    .risk-high { color: red; font-weight: bold; }
+  </style>
 </head>
 <body>
-    <h1>Hello, shrads here</h1>
+  <h1>🔒 PII Redactor</h1>
+
+  <h3>Paste text</h3>
+  <textarea id="textInput" placeholder="Paste text containing emails, phone numbers, etc."></textarea>
+  <br>
+  <button onclick="redactText()">Redact Text</button>
+
+  <h3>Or upload a PDF</h3>
+  <input type="file" id="pdfInput" accept="application/pdf">
+  <button onclick="redactPDF()">Redact PDF</button>
+
+  <div id="results"></div>
+
+  <script>
+    let latestRedacted = '';
+
+    async function redactText() {
+      const text = document.getElementById('textInput').value;
+      const res = await fetch('http://localhost:5000/api/redact-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      const data = await res.json();
+      showResults(data);
+    }
+
+    async function redactPDF() {
+      const file = document.getElementById('pdfInput').files[0];
+      if (!file) return alert('Please choose a PDF file');
+      const formData = new FormData();
+      formData.append('pdf', file);
+
+      const res = await fetch('http://localhost:5000/api/redact-pdf', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      showResults(data);
+    }
+
+    function showResults(data) {
+      latestRedacted = data.redacted;
+
+      const summary = Object.entries(data.found)
+        .map(([type, count]) => `${count} ${type}(s)`)
+        .join(', ') || 'No PII detected';
+
+      const riskClass = 'risk-' + data.riskLevel.toLowerCase();
+
+      document.getElementById('results').innerHTML = `
+        <div class="box summary">
+          <b>🔍 Summary:</b> ${summary}<br>
+          <b>Privacy Risk Score:</b> <span class="${riskClass}">${data.riskScore}/10 — ${data.riskLevel}</span>
+        </div>
+        <div class="box"><b>Original (PII highlighted):</b><br>${data.highlighted}</div>
+        <div class="box redacted"><b>Redacted:</b><br>${data.redacted}</div>
+        <button onclick="downloadRedacted()">⬇️ Download Redacted Text</button>
+      `;
+    }
+
+    function downloadRedacted() {
+      const blob = new Blob([latestRedacted], { type: 'text/plain' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'redacted_document.txt';
+      link.click();
+    }
+  </script>
 </body>
 </html>
